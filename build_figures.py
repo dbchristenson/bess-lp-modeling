@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
@@ -30,43 +31,45 @@ TAU_OPTIONS = [1, 2, 4]
 DPI = 300
 
 PAL = {
-    "grid":     "#4A6FA5",
-    "charge":   "#5C4D7D",
-    "discharge":"#E9A820",
-    "load":     "#264653",
-    "spot":     "#D4A017",
-    "spot_fill":"#E9C46A",
-    "soc":      "#7B2D8E",
+    "grid": "#4A6FA5",
+    "charge": "#5C4D7D",
+    "discharge": "#E9A820",
+    "load": "#264653",
+    "spot": "#D4A017",
+    "spot_fill": "#E9C46A",
+    "soc": "#7B2D8E",
     "baseline": "#8D99AE",
-    "dr":       "#F4A261",
+    "dr": "#F4A261",
     "positive": "#2A9D8F",
     "negative": "#E63946",
-    "neutral":  "#4A6FA5",
+    "neutral": "#4A6FA5",
 }
 
 
 def apply_theme():
-    plt.rcParams.update({
-        "font.family":        "sans-serif",
-        "font.size":          11,
-        "axes.titlesize":     14,
-        "axes.titleweight":   "bold",
-        "axes.labelsize":     12,
-        "axes.spines.top":    False,
-        "axes.spines.right":  False,
-        "axes.grid":          True,
-        "axes.grid.axis":     "y",
-        "grid.alpha":         0.3,
-        "grid.linewidth":     0.5,
-        "legend.fontsize":    10,
-        "legend.framealpha":  0.9,
-        "xtick.labelsize":    10,
-        "ytick.labelsize":    10,
-        "figure.facecolor":   "white",
-        "axes.facecolor":     "white",
-        "savefig.facecolor":  "white",
-        "savefig.bbox":       "tight",
-    })
+    plt.rcParams.update(
+        {
+            "font.family": "sans-serif",
+            "font.size": 11,
+            "axes.titlesize": 14,
+            "axes.titleweight": "bold",
+            "axes.labelsize": 12,
+            "axes.spines.top": False,
+            "axes.spines.right": False,
+            "axes.grid": True,
+            "axes.grid.axis": "y",
+            "grid.alpha": 0.3,
+            "grid.linewidth": 0.5,
+            "legend.fontsize": 10,
+            "legend.framealpha": 0.9,
+            "xtick.labelsize": 10,
+            "ytick.labelsize": 10,
+            "figure.facecolor": "white",
+            "axes.facecolor": "white",
+            "savefig.facecolor": "white",
+            "savefig.bbox": "tight",
+        }
+    )
 
 
 def hour_index_to_datetime(h):
@@ -91,6 +94,7 @@ def build_calendar():
 # Figures
 # ---------------------------------------------------------------------------
 
+
 def fig1_spot_price_heatmap(spot):
     months_arr, hours_arr, _, _ = build_calendar()
     heatmap = np.zeros((24, 12))
@@ -102,14 +106,35 @@ def fig1_spot_price_heatmap(spot):
     heatmap /= np.maximum(counts, 1)
 
     fig, ax = plt.subplots(figsize=(10, 6))
-    im = ax.imshow(heatmap, aspect="auto", cmap="RdYlBu_r", origin="lower",
-                   vmin=-10, vmax=160, interpolation="nearest")
+    im = ax.imshow(
+        heatmap,
+        aspect="auto",
+        cmap="RdYlBu_r",
+        origin="lower",
+        vmin=-10,
+        vmax=160,
+        interpolation="nearest",
+    )
     ax.set_xlabel("Month")
     ax.set_ylabel("Hour of Day")
     ax.set_title("Average Hourly I-SEM Spot Price (EUR/MWh), 2023")
     ax.set_xticks(range(12))
-    ax.set_xticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+    ax.set_xticklabels(
+        [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ]
+    )
     ax.set_yticks(range(0, 24, 2))
     ax.grid(False)
     for spine in ax.spines.values():
@@ -133,18 +158,48 @@ def _dispatch_figure(spot, dispatch, t_start, t_end, title, filename):
     charging = np.maximum(grid_imp - D_MW, 0)
 
     fig, (ax1, ax2) = plt.subplots(
-        2, 1, figsize=(14, 7), height_ratios=[3, 1],
-        sharex=True, layout="constrained",
+        2,
+        1,
+        figsize=(14, 7),
+        height_ratios=[3, 1],
+        sharex=True,
+        layout="constrained",
     )
 
-    ax1.bar(x, load_from_grid, color=PAL["grid"], alpha=0.7, width=0.85,
-            label="Grid → Load")
-    ax1.bar(x, load_from_bess, bottom=load_from_grid, color=PAL["discharge"],
-            alpha=0.7, width=0.85, label="Discharging to Load")
-    ax1.bar(x, charging, bottom=D_MW, color=PAL["charge"], alpha=0.7,
-            width=0.85, label="Charging from Grid")
-    ax1.axhline(y=D_MW, color=PAL["load"], linestyle="--", linewidth=1.8,
-                label=f"DC Load ({D_MW:.0f} MW)", zorder=5)
+    ax1.bar(
+        x,
+        load_from_grid,
+        color=PAL["grid"],
+        alpha=0.7,
+        width=0.85,
+        label="Grid → Load",
+    )
+    ax1.bar(
+        x,
+        load_from_bess,
+        bottom=load_from_grid,
+        color=PAL["discharge"],
+        alpha=0.7,
+        width=0.85,
+        label="Discharging to Load",
+    )
+    ax1.bar(
+        x,
+        charging,
+        bottom=D_MW,
+        color=PAL["charge"],
+        alpha=0.7,
+        width=0.85,
+        label="Charging from Grid",
+    )
+    ax1.axhline(
+        y=D_MW,
+        color=PAL["load"],
+        linestyle="--",
+        linewidth=1.8,
+        label=f"DC Load ({D_MW:.0f} MW)",
+        zorder=5,
+    )
 
     ax1.set_ylabel("Power (MW)")
     ax1.set_title(title)
@@ -154,7 +209,9 @@ def _dispatch_figure(spot, dispatch, t_start, t_end, title, filename):
     ax1.spines["bottom"].set_visible(False)
     ax1.tick_params(axis="x", length=0)
 
-    ax2.fill_between(x, spot[sl], alpha=0.3, color=PAL["spot_fill"], step="mid")
+    ax2.fill_between(
+        x, spot[sl], alpha=0.3, color=PAL["spot_fill"], step="mid"
+    )
     ax2.step(x, spot[sl], where="mid", color=PAL["spot"], linewidth=1.5)
     ax2.set_ylabel("Spot Price\n(EUR/MWh)")
     ax2.set_xlabel("Hour")
@@ -163,7 +220,8 @@ def _dispatch_figure(spot, dispatch, t_start, t_end, title, filename):
     ax2.set_xticks(range(0, n, tick_step))
     ax2.set_xticklabels(
         [f"{(t_start + h) % 24:02d}:00" for h in range(0, n, tick_step)],
-        rotation=45, ha="right",
+        rotation=45,
+        ha="right",
     )
 
     for h in range(24, n, 24):
@@ -192,7 +250,10 @@ def fig2_dispatch_winter(spot, tou, dispatch):
     dt_start = hour_index_to_datetime(t_start)
 
     _dispatch_figure(
-        spot, dispatch, t_start, t_end,
+        spot,
+        dispatch,
+        t_start,
+        t_end,
         f"48-Hour Dispatch — Winter Peak ({dt_start.strftime('%d %b')})",
         "02_dispatch_winter_peak.png",
     )
@@ -216,7 +277,10 @@ def fig3_dispatch_spring(spot, tou, dispatch):
     dt_start = hour_index_to_datetime(t_start)
 
     _dispatch_figure(
-        spot, dispatch, t_start, t_end,
+        spot,
+        dispatch,
+        t_start,
+        t_end,
         f"48-Hour Dispatch — Spring Low-Price ({dt_start.strftime('%d %b')})",
         "03_dispatch_spring_low.png",
     )
@@ -226,54 +290,98 @@ def fig4_cost_waterfall(baseline, bess_result, dr_result):
     fig, ax = plt.subplots(figsize=(10, 5.5))
 
     grid_only = baseline["total_cost"] / 1e6
-    arb_savings = (baseline["total_cost"] - bess_result["total_cost"]
-                   + bess_result["bess_annual_cost"]) / 1e6
+    arb_savings = (
+        baseline["total_cost"]
+        - bess_result["total_cost"]
+        + bess_result["bess_annual_cost"]
+    ) / 1e6
     bess_cost = bess_result["bess_annual_cost"] / 1e6
     dr_rev = dr_result["dr_revenue"] / 1e6
     net_savings = arb_savings - bess_cost + dr_rev
     net_cost = grid_only - net_savings
 
-    categories = ["Arbitrage\nSavings", "BESS Annual\nCost", "DR\nRevenue",
-                  "Net\nSavings"]
+    categories = [
+        "Arbitrage\nSavings",
+        "BESS Annual\nCost",
+        "DR\nRevenue",
+        "Net\nSavings",
+    ]
     values = [arb_savings, -bess_cost, dr_rev, net_savings]
-    colors = [PAL["positive"], PAL["negative"], PAL["positive"], PAL["neutral"]]
+    colors = [
+        PAL["positive"],
+        PAL["negative"],
+        PAL["positive"],
+        PAL["neutral"],
+    ]
 
     y_pos = np.arange(len(categories))
-    ax.barh(y_pos, values, color=colors, height=0.55, edgecolor="white",
-            linewidth=1.5, alpha=0.85)
+    ax.barh(
+        y_pos,
+        values,
+        color=colors,
+        height=0.55,
+        edgecolor="white",
+        linewidth=1.5,
+        alpha=0.85,
+    )
 
     ax.axhline(2.55, color="#ddd", linewidth=1)
 
     pad = max(abs(v) for v in values) * 0.04
     for i, (v, c) in enumerate(zip(values, colors)):
         if v >= 0:
-            ax.text(v + pad, y_pos[i], f"+€{v:.2f}M/yr",
-                    va="center", ha="left", fontsize=11, fontweight="bold",
-                    color=c)
+            ax.text(
+                v + pad,
+                y_pos[i],
+                f"+€{v:.2f}M/yr",
+                va="center",
+                ha="left",
+                fontsize=11,
+                fontweight="bold",
+                color=c,
+            )
         else:
-            ax.text(pad, y_pos[i], f"−€{abs(v):.2f}M/yr",
-                    va="center", ha="left", fontsize=11, fontweight="bold",
-                    color=c)
+            ax.text(
+                pad,
+                y_pos[i],
+                f"−€{abs(v):.2f}M/yr",
+                va="center",
+                ha="left",
+                fontsize=11,
+                fontweight="bold",
+                color=c,
+            )
 
     ax.axvline(0, color="#333", linewidth=0.8)
     ax.set_yticks(y_pos)
     ax.set_yticklabels(categories, fontsize=11)
     ax.invert_yaxis()
     ax.set_xlabel("Annual Impact (M€/yr)")
-    ax.set_title(
-        f"Cost Impact vs. Grid-Only Baseline (€{grid_only:.2f}M/yr)"
-    )
+    ax.set_title(f"Cost Impact vs. Grid-Only Baseline (€{grid_only:.2f}M/yr)")
 
     if net_savings >= 0:
-        summary = (f"Net annual cost: €{net_cost:.2f}M/yr  "
-                   f"(−{net_savings / grid_only * 100:.1f}%)")
+        summary = (
+            f"Net annual cost: €{net_cost:.2f}M/yr  "
+            f"(−{net_savings / grid_only * 100:.1f}%)"
+        )
     else:
-        summary = (f"Net annual cost: €{net_cost:.2f}M/yr  "
-                   f"(+{-net_savings / grid_only * 100:.1f}%)")
-    ax.text(0.98, 0.05, summary, transform=ax.transAxes, ha="right",
-            va="bottom", fontsize=11, fontweight="bold",
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="#f0f0f0",
-                      edgecolor="#ccc"))
+        summary = (
+            f"Net annual cost: €{net_cost:.2f}M/yr  "
+            f"(+{-net_savings / grid_only * 100:.1f}%)"
+        )
+    ax.text(
+        0.98,
+        0.05,
+        summary,
+        transform=ax.transAxes,
+        ha="right",
+        va="bottom",
+        fontsize=11,
+        fontweight="bold",
+        bbox=dict(
+            boxstyle="round,pad=0.5", facecolor="#f0f0f0", edgecolor="#ccc"
+        ),
+    )
 
     fig.tight_layout()
     fig.savefig(FIGURES_DIR / "04_cost_waterfall.png", dpi=DPI)
@@ -292,8 +400,9 @@ def fig5_weekly_soc(spot, dispatch, bess_E):
 
     x = np.arange(n)
     ax1.fill_between(x, 0, dispatch["soc"][sl], alpha=0.2, color=PAL["soc"])
-    ax1.plot(x, dispatch["soc"][sl], color=PAL["soc"], linewidth=1.8,
-             label="SoC")
+    ax1.plot(
+        x, dispatch["soc"][sl], color=PAL["soc"], linewidth=1.8, label="SoC"
+    )
     ax1.set_ylabel("State of Charge (MWh)", color=PAL["soc"])
     ax1.set_ylim(0, bess_E * 1.1)
     ax1.tick_params(axis="y", labelcolor=PAL["soc"])
@@ -301,8 +410,14 @@ def fig5_weekly_soc(spot, dispatch, bess_E):
     ax1.spines["right"].set_visible(True)
 
     ax2 = ax1.twinx()
-    ax2.plot(x, spot[sl], color=PAL["spot"], linewidth=1, alpha=0.55,
-             label="Spot Price")
+    ax2.plot(
+        x,
+        spot[sl],
+        color=PAL["spot"],
+        linewidth=1,
+        alpha=0.55,
+        label="Spot Price",
+    )
     ax2.set_ylabel("Spot Price (EUR/MWh)", color=PAL["spot"])
     ax2.tick_params(axis="y", labelcolor=PAL["spot"])
     ax2.spines["right"].set_visible(True)
@@ -360,10 +475,22 @@ def fig6_bess_config_comparison(bess_results, baseline_cost):
             values.append(savings)
             bar_colors.append(tau_colors[tau])
 
-    ax.bar(positions, values, width=width, color=bar_colors, alpha=0.85,
-           edgecolor="white", linewidth=1)
-    ax.axhline(0, color=PAL["baseline"], linewidth=2, linestyle="--",
-               label="Grid-Only Breakeven")
+    ax.bar(
+        positions,
+        values,
+        width=width,
+        color=bar_colors,
+        alpha=0.85,
+        edgecolor="white",
+        linewidth=1,
+    )
+    ax.axhline(
+        0,
+        color=PAL["baseline"],
+        linewidth=2,
+        linestyle="--",
+        label="Grid-Only Breakeven",
+    )
 
     center_positions = [
         idx_p * group_width + width for idx_p in range(len(P_OPTIONS))
@@ -372,13 +499,20 @@ def fig6_bess_config_comparison(bess_results, baseline_cost):
     ax.set_xticklabels([f"{P} MW" for P in P_OPTIONS])
 
     legend_elements = [
-        mpatches.Patch(facecolor=tau_colors[t], alpha=0.85,
-                       label=f"{t}h duration")
+        mpatches.Patch(
+            facecolor=tau_colors[t], alpha=0.85, label=f"{t}h duration"
+        )
         for t in TAU_OPTIONS
     ]
     legend_elements.append(
-        plt.Line2D([0], [0], color=PAL["baseline"], linestyle="--",
-                   linewidth=2, label="Breakeven")
+        plt.Line2D(
+            [0],
+            [0],
+            color=PAL["baseline"],
+            linestyle="--",
+            linewidth=2,
+            label="Breakeven",
+        )
     )
     ax.legend(handles=legend_elements)
 
@@ -395,23 +529,38 @@ def fig6_bess_config_comparison(bess_results, baseline_cost):
 def fig7_dr_breakeven(dr_result):
     fig, ax = plt.subplots(figsize=(10, 7))
 
-    X, Y = np.meshgrid(dr_result["cap_rates"],
-                        dr_result["energy_rates"])
+    X, Y = np.meshgrid(dr_result["cap_rates"], dr_result["energy_rates"])
     Z = dr_result["breakeven_grid"] / 1e6
 
     im = ax.contourf(X, Y, Z, levels=20, cmap="RdYlGn")
-    contour = ax.contour(X, Y, Z, levels=[0], colors=["#333"],
-                         linewidths=2.5, linestyles=["--"])
+    contour = ax.contour(
+        X, Y, Z, levels=[0], colors=["#333"], linewidths=2.5, linestyles=["--"]
+    )
     ax.clabel(contour, fmt="Break-even", fontsize=10, colors=["#333"])
 
-    ax.plot(138, 81, marker="*", markersize=18, color="white",
-            markeredgecolor="#333", markeredgewidth=1.5, zorder=5)
+    ax.plot(
+        138,
+        81,
+        marker="*",
+        markersize=18,
+        color="white",
+        markeredgecolor="#333",
+        markeredgewidth=1.5,
+        zorder=5,
+    )
     ax.annotate(
         "EirGrid DSU rate\n(€138k/MW/yr, €81/MWh)",
-        xy=(138, 81), xytext=(170, 55), fontsize=10, fontweight="bold",
+        xy=(138, 81),
+        xytext=(170, 55),
+        fontsize=10,
+        fontweight="bold",
         arrowprops=dict(arrowstyle="->", color="#333", lw=1.5),
-        bbox=dict(boxstyle="round,pad=0.4", facecolor="white",
-                  edgecolor="#333", alpha=0.9),
+        bbox=dict(
+            boxstyle="round,pad=0.4",
+            facecolor="white",
+            edgecolor="#333",
+            alpha=0.9,
+        ),
     )
 
     cb = fig.colorbar(im, ax=ax, shrink=0.85)
@@ -420,7 +569,9 @@ def fig7_dr_breakeven(dr_result):
 
     ax.set_xlabel("DSU Capacity Payment (k€/MW/yr)")
     ax.set_ylabel("Avoided Peak Energy Charge (EUR/MWh)")
-    ax.set_title("DR Break-Even Analysis — EirGrid DSU Capacity + Energy Arbitrage")
+    ax.set_title(
+        "DR Break-Even Analysis — EirGrid DSU Capacity + Energy Arbitrage"
+    )
     for spine in ax.spines.values():
         spine.set_visible(False)
 
@@ -467,46 +618,90 @@ def fig9_payback_period(payback_data):
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     panels = [
-        (ax1, cum_simple_bess, cum_simple_dr,
-         "Simple Payback", "Cumulative Cash Flow (M€)", False),
-        (ax2, cum_disc_bess, cum_disc_dr,
-         f"Discounted Payback (WACC = {wacc:.0%})",
-         "Cumulative Discounted Cash Flow (M€)", True),
+        (
+            ax1,
+            cum_simple_bess,
+            cum_simple_dr,
+            "Simple Payback",
+            "Cumulative Cash Flow (M€)",
+            False,
+        ),
+        (
+            ax2,
+            cum_disc_bess,
+            cum_disc_dr,
+            f"Discounted Payback (WACC = {wacc:.0%})",
+            "Cumulative Discounted Cash Flow (M€)",
+            True,
+        ),
     ]
 
     for ax, cb, cd, title, ylabel, show_npv in panels:
-        ax.plot(years, cb / 1e6, color=PAL["grid"], linewidth=2.5,
-                marker="o", markersize=4, label="BESS Only", zorder=3)
-        ax.plot(years, cd / 1e6, color=PAL["dr"], linewidth=2.5,
-                marker="s", markersize=4, label="BESS + DR", zorder=3)
+        ax.plot(
+            years,
+            cb / 1e6,
+            color=PAL["grid"],
+            linewidth=2.5,
+            marker="o",
+            markersize=4,
+            label="BESS Only",
+            zorder=3,
+        )
+        ax.plot(
+            years,
+            cd / 1e6,
+            color=PAL["dr"],
+            linewidth=2.5,
+            marker="s",
+            markersize=4,
+            label="BESS + DR",
+            zorder=3,
+        )
         ax.fill_between(
-            years, np.minimum(cb, cd) / 1e6, 0,
-            where=(np.minimum(cb, cd) < 0), alpha=0.06, color=PAL["negative"],
+            years,
+            np.minimum(cb, cd) / 1e6,
+            0,
+            where=(np.minimum(cb, cd) < 0),
+            alpha=0.06,
+            color=PAL["negative"],
         )
         ax.axhline(0, color="#333", linewidth=0.8, linestyle="--", alpha=0.5)
 
         pb_bess = find_pb(cb)
         pb_dr = find_pb(cd)
 
-        for pb, color, y_sign in [(pb_dr, PAL["dr"], 1),
-                                   (pb_bess, PAL["grid"], -1)]:
+        for pb, color, y_sign in [
+            (pb_dr, PAL["dr"], 1),
+            (pb_bess, PAL["grid"], -1),
+        ]:
             if pb is not None and pb <= lt:
                 ax.plot(pb, 0, marker="D", color=color, markersize=8, zorder=5)
                 ax.annotate(
-                    f"{pb:.1f} yr", xy=(pb, 0),
-                    xytext=(12, 16 * y_sign), textcoords="offset points",
-                    fontsize=10, fontweight="bold", color=color,
+                    f"{pb:.1f} yr",
+                    xy=(pb, 0),
+                    xytext=(-12, 30 * y_sign),
+                    textcoords="offset points",
+                    fontsize=10,
+                    fontweight="bold",
+                    color=color,
                     arrowprops=dict(arrowstyle="->", color=color, lw=1.2),
                 )
 
         if show_npv:
-            for cum, color, v_off in [(cb, PAL["grid"], -14),
-                                       (cd, PAL["dr"], 10)]:
+            for cum, color, v_off in [
+                (cb, PAL["grid"], -24),
+                (cd, PAL["dr"], 6),
+            ]:
                 npv = cum[-1]
                 ax.annotate(
-                    f"NPV: €{npv / 1e6:+.2f}M", xy=(lt, npv / 1e6),
-                    xytext=(-8, v_off), textcoords="offset points",
-                    fontsize=9, color=color, ha="right", fontweight="bold",
+                    f"NPV: €{npv / 1e6:+.2f}M",
+                    xy=(lt, npv / 1e6),
+                    xytext=(-8, v_off),
+                    textcoords="offset points",
+                    fontsize=9,
+                    color=color,
+                    ha="right",
+                    fontweight="bold",
                 )
 
         ax.set_xlabel("Year")
@@ -519,7 +714,8 @@ def fig9_payback_period(payback_data):
 
     fig.suptitle(
         f"BESS Investment Payback — {P:.0f} MW / {E:.0f} MWh",
-        fontsize=14, fontweight="bold",
+        fontsize=14,
+        fontweight="bold",
     )
     fig.tight_layout()
     fig.savefig(FIGURES_DIR / "09_payback_period.png", dpi=DPI)
@@ -544,23 +740,58 @@ def fig8_monthly_cost(spot, tou, dispatch):
 
     x = np.arange(12)
     width = 0.35
-    ax.bar(x - width / 2, baseline_monthly / 1e6, width,
-           color=PAL["baseline"], alpha=0.85, label="Grid-Only",
-           edgecolor="white", linewidth=1)
-    ax.bar(x + width / 2, bess_monthly / 1e6, width,
-           color=PAL["grid"], alpha=0.85, label="Grid + BESS",
-           edgecolor="white", linewidth=1)
+    ax.bar(
+        x - width / 2,
+        baseline_monthly / 1e6,
+        width,
+        color=PAL["baseline"],
+        alpha=0.85,
+        label="Grid-Only",
+        edgecolor="white",
+        linewidth=1,
+    )
+    ax.bar(
+        x + width / 2,
+        bess_monthly / 1e6,
+        width,
+        color=PAL["grid"],
+        alpha=0.85,
+        label="Grid + BESS",
+        edgecolor="white",
+        linewidth=1,
+    )
 
     for i in range(12):
         if savings_pct[i] > 0.1:
             y_top = max(baseline_monthly[i], bess_monthly[i]) / 1e6
-            ax.text(x[i], y_top + 0.008, f"−{savings_pct[i]:.1f}%",
-                    ha="center", va="bottom", fontsize=8,
-                    color=PAL["positive"], fontweight="bold")
+            ax.text(
+                x[i],
+                y_top + 0.008,
+                f"−{savings_pct[i]:.1f}%",
+                ha="center",
+                va="bottom",
+                fontsize=8,
+                color=PAL["positive"],
+                fontweight="bold",
+            )
 
     ax.set_xticks(x)
-    ax.set_xticklabels(["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"])
+    ax.set_xticklabels(
+        [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+        ]
+    )
     ax.set_ylabel("Monthly Energy Cost (M€)")
     ax.set_title("Monthly Electricity Cost — Grid-Only vs. BESS")
     ax.legend()
@@ -574,6 +805,7 @@ def fig8_monthly_cost(spot, tou, dispatch):
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
+
 
 def main():
     print("Loading results from", RESULTS_PKL)
