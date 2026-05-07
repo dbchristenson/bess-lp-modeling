@@ -64,6 +64,11 @@ S0_FRAC = 0.5  # initial SoC fraction
 P_OPTIONS = [2, 4, 6, 8, 10]  # MW
 TAU_OPTIONS = [1, 2, 4]        # hours
 
+# Demand Side Unit (DSU) — EirGrid capacity market
+DSU_MIN_MW = 4.0        # minimum enrolled capacity to participate as DSU
+EIRGRID_CAP_RATE = 138  # k€/MW/yr — EirGrid average annual DSU capacity payment
+ENERGY_ARB_RATE = 81.0  # EUR/MWh — avoided peak energy charge (thesis reference)
+
 
 def hour_index_to_datetime(h):
     return datetime(YEAR, 1, 1) + timedelta(hours=int(h))
@@ -227,7 +232,11 @@ def solve_bess_dispatch(P_BESS, E_BESS, spot, tou, verbose=False):
 
 
 def run_bess_optimization(spot, tou, bess_costs):
-    """Enumerate all BESS configs, return results dict keyed by (P, tau)."""
+    """Enumerate all BESS configs, return results dict keyed by (P, tau).
+
+    Each config includes DR revenue (DSU capacity payment + energy arbitrage)
+    so that config selection can account for the EirGrid capacity market.
+    """
     results = {}
     for P in P_OPTIONS:
         for tau in TAU_OPTIONS:
@@ -240,6 +249,8 @@ def run_bess_optimization(spot, tou, bess_costs):
                 continue
             bess_annual = annualized_bess_cost(P, E, bess_costs)
             total = F_SUB + bess_annual + dispatch["import_cost"]
+            dr_info = compute_dr_revenue(dispatch, P, E)
+            net_cost = total - dr_info["dr_revenue"]
             emissions = float(np.sum(dispatch["grid_import"])) * CARBON_INTENSITY / 1000
             results[(P, tau)] = {
                 "P_MW": P,
@@ -248,11 +259,14 @@ def run_bess_optimization(spot, tou, bess_costs):
                 "bess_annual_cost": bess_annual,
                 "import_cost": dispatch["import_cost"],
                 "total_cost": total,
+                "net_cost": net_cost,
                 "emissions_tCO2": emissions,
                 "cycles": dispatch["cycles"],
                 "dispatch": dispatch,
+                "dr_info": dr_info,
             }
-            print(f"done — €{total / 1e6:.2f}M/yr")
+            dsu_tag = " [DSU]" if dr_info["dsu_eligible"] else ""
+            print(f"done — €{total / 1e6:.2f}M/yr (net €{net_cost / 1e6:.2f}M/yr){dsu_tag}")
     return results
 
 
@@ -335,13 +349,10 @@ def compute_5of10_baseline(grid_import, event_hour, events_set):
     return np.mean(candidates[:5])
 
 
-def dr_breakeven_analysis(bess_result, baseline_cost, spot, tou):
-    """Compute DR events and sweep over payment rates to find break-even."""
-    dispatch = bess_result["dispatch"]
+def compute_dr_revenue(dispatch, P_BESS, E_BESS):
+    """Compute DSU enrolled capacity and DR revenue for a BESS configuration."""
     grid_import = dispatch["grid_import"]
     soc = dispatch["soc"]
-    P_BESS = bess_result["P_MW"]
-    E_BESS = bess_result["E_MWh"]
 
     events = identify_dr_events(grid_import)
     events_hours = set()
@@ -370,41 +381,54 @@ def dr_breakeven_analysis(bess_result, baseline_cost, spot, tou):
         ev["curtailed_MWh"] = curtailed_total
         ev["capacity_claim_MW"] = capacity_total / ev["duration_h"]
 
-    # Annual enrolled capacity: average capacity claim across events (kW)
-    enrolled_capacity_kW = float(
-        np.mean([ev["capacity_claim_MW"] for ev in events]) * 1000
-    )
+    enrolled_capacity_MW = float(np.mean([ev["capacity_claim_MW"] for ev in events]))
+    dsu_eligible = enrolled_capacity_MW >= DSU_MIN_MW
 
-    # Annual peak-hour BESS discharge: total MWh discharged during weekday 16-21
     _, hours_arr, dows_arr, _ = build_calendar()
     peak_mask = (dows_arr < 5) & (hours_arr >= 16) & (hours_arr < 21)
     annual_peak_discharge_MWh = float(np.sum(dispatch["discharge"][peak_mask]))
 
-    # Sweep: annual capacity payment (EUR/kW/yr) × avoided peak charge (EUR/MWh)
-    cap_rates = np.linspace(0, 80, 41)       # EUR/kW/yr
-    energy_rates = np.linspace(0, 150, 31)   # EUR/MWh
+    annual_cap_payment = EIRGRID_CAP_RATE * 1000 * enrolled_capacity_MW if dsu_eligible else 0.0
+    energy_arb_revenue = ENERGY_ARB_RATE * annual_peak_discharge_MWh
+    dr_revenue = annual_cap_payment + energy_arb_revenue
+
+    return {
+        "events": events,
+        "enrolled_capacity_MW": enrolled_capacity_MW,
+        "dsu_eligible": dsu_eligible,
+        "annual_cap_payment": annual_cap_payment,
+        "energy_arb_revenue": energy_arb_revenue,
+        "dr_revenue": dr_revenue,
+        "annual_peak_discharge_MWh": annual_peak_discharge_MWh,
+    }
+
+
+def dr_breakeven_analysis(bess_result, baseline_cost):
+    """Breakeven sweep using pre-computed DR info from BESS config selection."""
+    dr_info = bess_result["dr_info"]
+    enrolled_capacity_MW = dr_info["enrolled_capacity_MW"]
+    dsu_eligible = dr_info["dsu_eligible"]
+    annual_peak_discharge_MWh = dr_info["annual_peak_discharge_MWh"]
+
+    cap_rates = np.linspace(0, 250, 51)      # k€/MW/yr
+    energy_rates = np.linspace(0, 150, 31)    # EUR/MWh
 
     bess_deficit = bess_result["total_cost"] - baseline_cost
 
     breakeven_grid = np.zeros((len(energy_rates), len(cap_rates)))
     for j, cr in enumerate(cap_rates):
         for k, er in enumerate(energy_rates):
-            revenue = cr * enrolled_capacity_kW + er * annual_peak_discharge_MWh
-            breakeven_grid[k, j] = revenue + bess_deficit
-
-    thesis_cr, thesis_er = 36.0, 81.0  # EUR/kW/yr, EUR/MWh
-    thesis_rev = thesis_cr * enrolled_capacity_kW + thesis_er * annual_peak_discharge_MWh
+            cap_rev = cr * 1000 * enrolled_capacity_MW if dsu_eligible else 0.0
+            energy_rev = er * annual_peak_discharge_MWh
+            breakeven_grid[k, j] = cap_rev + energy_rev + bess_deficit
 
     return {
-        "events": events,
+        **dr_info,
         "cap_rates": cap_rates,
         "energy_rates": energy_rates,
         "breakeven_grid": breakeven_grid,
         "bess_deficit": bess_deficit,
-        "thesis_revenue": thesis_rev,
-        "thesis_net": bess_deficit + thesis_rev,
-        "enrolled_capacity_kW": enrolled_capacity_kW,
-        "annual_peak_discharge_MWh": annual_peak_discharge_MWh,
+        "dr_net": bess_deficit + dr_info["dr_revenue"],
     }
 
 
@@ -420,9 +444,9 @@ def build_scenario_summary(baseline, bess_result, dr_result, bess_costs):
     bess_savings = baseline["total_cost"] - bess_result["total_cost"]
     bess_payback = capex / bess_savings if bess_savings > 0 else float("inf")
 
-    dr_savings = bess_savings + dr_result["thesis_revenue"]
+    dr_savings = bess_savings + dr_result["dr_revenue"]
     dr_payback = capex / dr_savings if dr_savings > 0 else float("inf")
-    dr_total_cost = bess_result["total_cost"] - dr_result["thesis_revenue"]
+    dr_total_cost = bess_result["total_cost"] - dr_result["dr_revenue"]
 
     return {
         "Grid-Only": {
@@ -485,20 +509,27 @@ def main():
     print("\n[Phase 3b] BESS optimization — Updated costs (BNEF 2025)...")
     bess_results_updated = run_bess_optimization(spot, tou, BESS_UPDATED)
 
-    # Select optimal config (updated costs)
-    best_key = min(bess_results_updated, key=lambda k: bess_results_updated[k]["total_cost"])
+    # Select optimal config (updated costs, accounting for DR revenue)
+    best_key = min(bess_results_updated, key=lambda k: bess_results_updated[k]["net_cost"])
     best = bess_results_updated[best_key]
+    dr_info = best["dr_info"]
     print(f"\n  Optimal config (updated): {best['P_MW']}MW / {best['E_MWh']}MWh ({best_key[1]}h)")
-    print(f"  Total cost: €{best['total_cost'] / 1e6:.2f}M/yr")
-    print(f"  Savings vs baseline: €{(baseline['total_cost'] - best['total_cost']) / 1e6:.2f}M/yr")
+    print(f"  Total cost (pre-DR): €{best['total_cost'] / 1e6:.2f}M/yr")
+    print(f"  DR revenue: €{dr_info['dr_revenue'] / 1e6:.2f}M/yr"
+          f" (DSU: {'Yes' if dr_info['dsu_eligible'] else 'No'},"
+          f" enrolled: {dr_info['enrolled_capacity_MW']:.1f} MW)")
+    print(f"  Net cost: €{best['net_cost'] / 1e6:.2f}M/yr")
+    print(f"  Savings vs baseline: €{(baseline['total_cost'] - best['net_cost']) / 1e6:.2f}M/yr")
 
-    # Phase 4: DR analysis
+    # Phase 4: DR break-even sensitivity analysis
     print("\n[Phase 4] Demand Response break-even analysis...")
-    dr_result = dr_breakeven_analysis(best, baseline["total_cost"], spot, tou)
+    dr_result = dr_breakeven_analysis(best, baseline["total_cost"])
     print(f"  Events identified: {len(dr_result['events'])}")
-    print(f"  DR revenue at thesis rates (€36/kW/yr, €81/MWh): €{dr_result['thesis_revenue']:,.0f}")
+    print(f"  DSU capacity payment (€{EIRGRID_CAP_RATE}k/MW/yr): €{dr_result['annual_cap_payment']:,.0f}")
+    print(f"  Energy arbitrage (€{ENERGY_ARB_RATE}/MWh): €{dr_result['energy_arb_revenue']:,.0f}")
+    print(f"  Total DR revenue: €{dr_result['dr_revenue']:,.0f}")
     print(f"  BESS deficit vs baseline: €{dr_result['bess_deficit']:,.0f}")
-    print(f"  Net with DR: €{dr_result['thesis_net']:,.0f} ({'profitable' if dr_result['thesis_net'] > 0 else 'not profitable'})")
+    print(f"  Net with DR: €{dr_result['dr_net']:,.0f} ({'profitable' if dr_result['dr_net'] > 0 else 'not profitable'})")
 
     # Phase 5: Summary
     print("\n[Phase 5] Building scenario summary...")
@@ -523,6 +554,7 @@ def main():
             "P_MW": best["P_MW"],
             "E_MWh": best["E_MWh"],
             "total_cost": best["total_cost"],
+            "net_cost": best["net_cost"],
             "bess_annual_cost": best["bess_annual_cost"],
             "emissions_tCO2": best["emissions_tCO2"],
             "cycles": best["cycles"],
@@ -534,8 +566,26 @@ def main():
             for key, val in bess_results_thesis.items()
         },
         "bess_results_updated": {
-            key: {"bess_annual_cost": val["bess_annual_cost"], "total_cost": val["total_cost"]}
+            key: {
+                "bess_annual_cost": val["bess_annual_cost"],
+                "total_cost": val["total_cost"],
+                "net_cost": val["net_cost"],
+                "dr_revenue": val["dr_info"]["dr_revenue"],
+                "dsu_eligible": val["dr_info"]["dsu_eligible"],
+            }
             for key, val in bess_results_updated.items()
+        },
+        "payback_data": {
+            "capex": BESS_UPDATED["c_P_cap"] * best["P_MW"] * 1000
+                     + BESS_UPDATED["c_E_cap"] * best["E_MWh"] * 1000,
+            "annual_opex": BESS_UPDATED["c_P_opex"] * best["P_MW"] * 1000
+                           + BESS_UPDATED["c_E_opex"] * best["E_MWh"] * 1000,
+            "energy_savings": baseline["import_cost"] - best["dispatch"]["import_cost"],
+            "dr_revenue": dr_info["dr_revenue"],
+            "wacc": WACC,
+            "lifetime": LT_BESS,
+            "P_MW": best["P_MW"],
+            "E_MWh": best["E_MWh"],
         },
     }
     with open(RESULTS_PKL, "wb") as f:

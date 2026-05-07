@@ -23,6 +23,7 @@ T = 8760
 YEAR = 2023
 D_MW = 10.0
 CARBON_INTENSITY = 225
+ENERGY_ARB_RATE = 81.0  # EUR/MWh — avoided peak energy charge
 
 BESS_UPDATED = {
     "label": "BNEF 2025 (updated)",
@@ -254,7 +255,7 @@ def write_dr_sheet(wb, dr_result):
     headers = ["Event #", "Day of Year", "Date", "Start Hour",
                "Duration (h)", "Baseline Import (MW)", "Actual Import (MW)",
                "Curtailed (MWh)", "Capacity Claim (MW)",
-               "Payment @€36/kW (€)", "Payment @€0.081/kWh (€)", "Total (€)"]
+               "Energy Arbitrage (€)"]
     for c, h in enumerate(headers, 1):
         ws.cell(row=1, column=c, value=h)
     style_header_row(ws, 1, len(headers))
@@ -263,15 +264,14 @@ def write_dr_sheet(wb, dr_result):
     for idx, ev in enumerate(events):
         row = idx + 2
         dt = hour_index_to_datetime(ev["start_hour"])
-        cap_pay = 36.0 * ev["capacity_claim_MW"] * 1000
-        en_pay = 0.081 * ev["curtailed_MWh"] * 1000
+        en_arb = ENERGY_ARB_RATE * ev["curtailed_MWh"]
         actual_import = D_MW - ev["curtailed_MWh"] / ev["duration_h"] if ev["duration_h"] > 0 else D_MW
 
         vals = [idx + 1, ev["day"], dt.strftime("%Y-%m-%d"),
                 dt.strftime("%H:%M"), ev["duration_h"],
                 ev["baseline_import_MW"], actual_import,
                 ev["curtailed_MWh"], ev["capacity_claim_MW"],
-                cap_pay, en_pay, cap_pay + en_pay]
+                en_arb]
         for c, val in enumerate(vals, 1):
             ws.cell(row=row, column=c, value=val)
             fmt = NUM_FMT_EUR_DEC if c >= 6 else None
@@ -281,28 +281,31 @@ def write_dr_sheet(wb, dr_result):
     ws.cell(row=total_row, column=1, value="TOTAL")
     ws.cell(row=total_row, column=1).font = Font(bold=True)
     ws.cell(row=total_row, column=8, value=sum(e["curtailed_MWh"] for e in events))
-    ws.cell(row=total_row, column=10, value=sum(36.0 * e["capacity_claim_MW"] * 1000 for e in events))
-    ws.cell(row=total_row, column=11, value=sum(0.081 * e["curtailed_MWh"] * 1000 for e in events))
-    ws.cell(row=total_row, column=12, value=dr_result["thesis_revenue"])
-    for c in range(1, 13):
+    ws.cell(row=total_row, column=10, value=sum(ENERGY_ARB_RATE * e["curtailed_MWh"] for e in events))
+    for c in range(1, 11):
         style_data_cell(ws, total_row, c, NUM_FMT_EUR_DEC if c >= 8 else None)
 
-    # Annual DR summary (capacity enrollment + avoided peak energy model)
     summary_row = total_row + 2
-    ws.cell(row=summary_row, column=1, value="Annual DR Model")
+    ws.cell(row=summary_row, column=1, value="Annual DSU Revenue Model")
     ws.cell(row=summary_row, column=1).font = Font(bold=True)
+    enrolled = dr_result.get("enrolled_capacity_MW", 0)
+    eligible = dr_result.get("dsu_eligible", False)
     labels = [
-        ("Enrolled Capacity (kW)", dr_result.get("enrolled_capacity_kW", 0)),
+        ("Enrolled Capacity (MW)", enrolled),
+        ("DSU Eligible (≥4 MW)", "Yes" if eligible else "No"),
+        ("EirGrid Capacity Payment (€)", dr_result.get("annual_cap_payment", 0)),
+        ("Energy Arbitrage (€)", dr_result.get("energy_arb_revenue", 0)),
+        ("Total DR Revenue (€)", dr_result["dr_revenue"]),
         ("Annual Peak Discharge (MWh)", dr_result.get("annual_peak_discharge_MWh", 0)),
-        ("Annual Revenue @ Thesis Rates (€)", dr_result["thesis_revenue"]),
         ("BESS Deficit (€)", dr_result["bess_deficit"]),
-        ("Net (€)", dr_result["thesis_net"]),
+        ("Net (€)", dr_result["dr_net"]),
     ]
     for i, (label, val) in enumerate(labels):
         r = summary_row + 1 + i
         ws.cell(row=r, column=1, value=label)
         ws.cell(row=r, column=2, value=val)
-        style_data_cell(ws, r, 2, NUM_FMT_EUR_DEC)
+        if not isinstance(val, str):
+            style_data_cell(ws, r, 2, NUM_FMT_EUR_DEC)
 
     auto_width(ws)
 

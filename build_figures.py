@@ -229,7 +229,7 @@ def fig4_cost_waterfall(baseline, bess_result, dr_result):
     arb_savings = (baseline["total_cost"] - bess_result["total_cost"]
                    + bess_result["bess_annual_cost"]) / 1e6
     bess_cost = bess_result["bess_annual_cost"] / 1e6
-    dr_rev = dr_result["thesis_revenue"] / 1e6
+    dr_rev = dr_result["dr_revenue"] / 1e6
     net_savings = arb_savings - bess_cost + dr_rev
     net_cost = grid_only - net_savings
 
@@ -404,11 +404,11 @@ def fig7_dr_breakeven(dr_result):
                          linewidths=2.5, linestyles=["--"])
     ax.clabel(contour, fmt="Break-even", fontsize=10, colors=["#333"])
 
-    ax.plot(36, 81, marker="*", markersize=18, color="white",
+    ax.plot(138, 81, marker="*", markersize=18, color="white",
             markeredgecolor="#333", markeredgewidth=1.5, zorder=5)
     ax.annotate(
-        "Thesis rates\n(€36/kW/yr, €81/MWh)",
-        xy=(36, 81), xytext=(52, 55), fontsize=10, fontweight="bold",
+        "EirGrid DSU rate\n(€138k/MW/yr, €81/MWh)",
+        xy=(138, 81), xytext=(170, 55), fontsize=10, fontweight="bold",
         arrowprops=dict(arrowstyle="->", color="#333", lw=1.5),
         bbox=dict(boxstyle="round,pad=0.4", facecolor="white",
                   edgecolor="#333", alpha=0.9),
@@ -418,14 +418,111 @@ def fig7_dr_breakeven(dr_result):
     cb.set_label("Net Annual Savings (M€/yr)")
     cb.outline.set_visible(False)
 
-    ax.set_xlabel("Annual DR Capacity Payment (EUR/kW/yr)")
+    ax.set_xlabel("DSU Capacity Payment (k€/MW/yr)")
     ax.set_ylabel("Avoided Peak Energy Charge (EUR/MWh)")
-    ax.set_title("DR Break-Even Analysis — Annual Capacity + Peak Energy Value")
+    ax.set_title("DR Break-Even Analysis — EirGrid DSU Capacity + Energy Arbitrage")
     for spine in ax.spines.values():
         spine.set_visible(False)
 
     fig.tight_layout()
     fig.savefig(FIGURES_DIR / "07_dr_breakeven_contour.png", dpi=DPI)
+    plt.close(fig)
+
+
+def fig9_payback_period(payback_data):
+    capex = payback_data["capex"]
+    opex = payback_data["annual_opex"]
+    savings = payback_data["energy_savings"]
+    dr_rev = payback_data["dr_revenue"]
+    wacc = payback_data["wacc"]
+    lt = payback_data["lifetime"]
+    P = payback_data["P_MW"]
+    E = payback_data["E_MWh"]
+
+    annual_bess = savings - opex
+    annual_dr = annual_bess + dr_rev
+    years = np.arange(0, lt + 1)
+
+    cum_simple_bess = np.concatenate(
+        [[-capex], -capex + np.cumsum(np.full(lt, annual_bess))]
+    )
+    cum_simple_dr = np.concatenate(
+        [[-capex], -capex + np.cumsum(np.full(lt, annual_dr))]
+    )
+
+    disc = np.array([1 / (1 + wacc) ** y for y in range(1, lt + 1)])
+    cum_disc_bess = np.concatenate(
+        [[-capex], -capex + np.cumsum(annual_bess * disc)]
+    )
+    cum_disc_dr = np.concatenate(
+        [[-capex], -capex + np.cumsum(annual_dr * disc)]
+    )
+
+    def find_pb(c):
+        for i in range(1, len(c)):
+            if c[i] >= 0 > c[i - 1]:
+                return i - 1 + (-c[i - 1]) / (c[i] - c[i - 1])
+        return None
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    panels = [
+        (ax1, cum_simple_bess, cum_simple_dr,
+         "Simple Payback", "Cumulative Cash Flow (M€)", False),
+        (ax2, cum_disc_bess, cum_disc_dr,
+         f"Discounted Payback (WACC = {wacc:.0%})",
+         "Cumulative Discounted Cash Flow (M€)", True),
+    ]
+
+    for ax, cb, cd, title, ylabel, show_npv in panels:
+        ax.plot(years, cb / 1e6, color=PAL["grid"], linewidth=2.5,
+                marker="o", markersize=4, label="BESS Only", zorder=3)
+        ax.plot(years, cd / 1e6, color=PAL["dr"], linewidth=2.5,
+                marker="s", markersize=4, label="BESS + DR", zorder=3)
+        ax.fill_between(
+            years, np.minimum(cb, cd) / 1e6, 0,
+            where=(np.minimum(cb, cd) < 0), alpha=0.06, color=PAL["negative"],
+        )
+        ax.axhline(0, color="#333", linewidth=0.8, linestyle="--", alpha=0.5)
+
+        pb_bess = find_pb(cb)
+        pb_dr = find_pb(cd)
+
+        for pb, color, y_sign in [(pb_dr, PAL["dr"], 1),
+                                   (pb_bess, PAL["grid"], -1)]:
+            if pb is not None and pb <= lt:
+                ax.plot(pb, 0, marker="D", color=color, markersize=8, zorder=5)
+                ax.annotate(
+                    f"{pb:.1f} yr", xy=(pb, 0),
+                    xytext=(12, 16 * y_sign), textcoords="offset points",
+                    fontsize=10, fontweight="bold", color=color,
+                    arrowprops=dict(arrowstyle="->", color=color, lw=1.2),
+                )
+
+        if show_npv:
+            for cum, color, v_off in [(cb, PAL["grid"], -14),
+                                       (cd, PAL["dr"], 10)]:
+                npv = cum[-1]
+                ax.annotate(
+                    f"NPV: €{npv / 1e6:+.2f}M", xy=(lt, npv / 1e6),
+                    xytext=(-8, v_off), textcoords="offset points",
+                    fontsize=9, color=color, ha="right", fontweight="bold",
+                )
+
+        ax.set_xlabel("Year")
+        ax.set_ylabel(ylabel)
+        ax.set_title(title)
+        ax.legend(loc="lower right")
+        ax.set_xlim(0, lt)
+        ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("€%.1fM"))
+
+    fig.suptitle(
+        f"BESS Investment Payback — {P:.0f} MW / {E:.0f} MWh",
+        fontsize=14, fontweight="bold",
+    )
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "09_payback_period.png", dpi=DPI)
     plt.close(fig)
 
 
@@ -519,6 +616,9 @@ def main():
 
     print("  Fig 8: Monthly cost comparison")
     fig8_monthly_cost(spot, tou, optimal_dispatch)
+
+    print("  Fig 9: Payback period")
+    fig9_payback_period(results["payback_data"])
 
     print(f"\nDone. Figures saved to {FIGURES_DIR}/")
 
