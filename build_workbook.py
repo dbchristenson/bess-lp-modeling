@@ -342,12 +342,67 @@ def write_cost_comparison_sheet(wb, spot, tou, dispatch):
     auto_width(ws)
 
 
+def write_beta_sweep_sheet(wb, beta_sweep, baseline_cost):
+    ws = wb.create_sheet("Beta Sensitivity")
+
+    headers = ["Beta", "Discount Formula", "Optimal P (MW)", "Optimal E (MWh)",
+               "Adj. DR Revenue (EUR)", "Adj. Net Cost (EUR)", "Savings vs Grid-Only (EUR)"]
+    for c, h in enumerate(headers, 1):
+        ws.cell(row=1, column=c, value=h)
+    style_header_row(ws, 1, len(headers))
+
+    for r, entry in enumerate(beta_sweep["sweep_results"], 2):
+        beta = entry["beta"]
+        bk = entry["best_key"]
+        cfg = entry["configs"][bk]
+        vals = [
+            beta,
+            f"1 - {beta:.2f} * (P / 10)",
+            cfg["P_MW"],
+            cfg["E_MWh"],
+            cfg["adjusted_dr_revenue"],
+            cfg["adjusted_net_cost"],
+            baseline_cost - cfg["adjusted_net_cost"],
+        ]
+        for c, val in enumerate(vals, 1):
+            ws.cell(row=r, column=c, value=val)
+            fmt = NUM_FMT_EUR_DEC if c == 1 else (NUM_FMT_EUR if c >= 5 and isinstance(val, (int, float)) else None)
+            style_data_cell(ws, r, c, fmt)
+
+    gap_row = len(beta_sweep["sweep_results"]) + 4
+    ws.cell(row=gap_row, column=1, value="Adjusted Net Cost by Config and Beta")
+    ws.cell(row=gap_row, column=1).font = Font(bold=True, size=12)
+
+    header_row = gap_row + 1
+    beta_values = beta_sweep["beta_values"]
+    ws.cell(row=header_row, column=1, value="Config")
+    for j, beta in enumerate(beta_values):
+        ws.cell(row=header_row, column=j + 2, value=f"β={beta:.2f}")
+    style_header_row(ws, header_row, len(beta_values) + 1)
+
+    data_row = header_row + 1
+    for P in P_OPTIONS:
+        for tau in TAU_OPTIONS:
+            key = (P, tau)
+            E = P * tau
+            ws.cell(row=data_row, column=1, value=f"{P}MW/{E}MWh")
+            style_data_cell(ws, data_row, 1)
+            for j, entry in enumerate(beta_sweep["sweep_results"]):
+                if key in entry["configs"]:
+                    val = entry["configs"][key]["adjusted_net_cost"]
+                    ws.cell(row=data_row, column=j + 2, value=val)
+                    style_data_cell(ws, data_row, j + 2, NUM_FMT_EUR)
+            data_row += 1
+
+    auto_width(ws)
+
+
 # ---------------------------------------------------------------------------
 # Workbook Assembly
 # ---------------------------------------------------------------------------
 
 def generate_workbook(summary, spot, tou, bess_results_thesis, bess_results_updated,
-                      baseline, optimal_dispatch, dr_result, baseline_cost):
+                      baseline, optimal_dispatch, dr_result, baseline_cost, beta_sweep=None):
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
@@ -358,6 +413,9 @@ def generate_workbook(summary, spot, tou, bess_results_thesis, bess_results_upda
     write_dispatch_sheet(wb, spot, tou, optimal_dispatch)
     write_dr_sheet(wb, dr_result)
     write_cost_comparison_sheet(wb, spot, tou, optimal_dispatch)
+
+    if beta_sweep is not None:
+        write_beta_sweep_sheet(wb, beta_sweep, baseline_cost)
 
     wb.save(OUTPUT_XLSX)
     print(f"  Workbook saved: {OUTPUT_XLSX}")
@@ -381,9 +439,12 @@ def main():
     bess_results_thesis = results["bess_results_thesis"]
     bess_results_updated = results["bess_results_updated"]
 
+    beta_sweep = results.get("beta_sweep")
+
     print("Generating Excel workbook...")
     generate_workbook(summary, spot, tou, bess_results_thesis, bess_results_updated,
-                      baseline, optimal_dispatch, dr_result, baseline["total_cost"])
+                      baseline, optimal_dispatch, dr_result, baseline["total_cost"],
+                      beta_sweep=beta_sweep)
 
     print(f"Done. Workbook saved to {OUTPUT_XLSX}")
 

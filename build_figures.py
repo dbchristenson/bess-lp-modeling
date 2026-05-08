@@ -802,6 +802,46 @@ def fig8_monthly_cost(spot, tou, dispatch):
     plt.close(fig)
 
 
+def fig10_beta_sensitivity(beta_sweep, baseline_cost):
+    sweep = beta_sweep["sweep_results"]
+    betas = [s["beta"] for s in sweep]
+    best_P = [s["best_P_MW"] for s in sweep]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
+
+    # Left: optimal BESS power vs beta
+    ax1.step(betas, best_P, where="mid", color=PAL["grid"], linewidth=2.5)
+    ax1.scatter(betas, best_P, color=PAL["grid"], zorder=5, s=50)
+    ax1.set_xlabel("Revenue Discount Factor (β)")
+    ax1.set_ylabel("Optimal BESS Power Rating (MW)")
+    ax1.set_title("Optimal BESS Size vs. Risk Aversion")
+    ax1.set_ylim(0, max(P_OPTIONS) + 1)
+    ax1.set_xlim(betas[0], betas[-1])
+
+    # Right: net cost by BESS power across betas
+    colors = plt.cm.viridis(np.linspace(0.15, 0.85, len(P_OPTIONS)))
+    for idx, P in enumerate(P_OPTIONS):
+        costs = []
+        for s in sweep:
+            p_configs = {k: v for k, v in s["configs"].items() if k[0] == P}
+            best_for_P = min(p_configs, key=lambda k: p_configs[k]["adjusted_net_cost"])
+            costs.append(p_configs[best_for_P]["adjusted_net_cost"] / 1e6)
+        ax2.plot(betas, costs, linewidth=2, label=f"{P} MW", marker="o",
+                 markersize=4, color=colors[idx])
+
+    ax2.axhline(baseline_cost / 1e6, color=PAL["baseline"], linestyle="--",
+                linewidth=1.5, label="Grid-Only")
+    ax2.set_xlabel("Revenue Discount Factor (β)")
+    ax2.set_ylabel("Annual Net Cost (M€/yr)")
+    ax2.set_title("Net Cost by BESS Size vs. Risk Aversion")
+    ax2.legend(loc="best", fontsize=9)
+
+    fig.suptitle("Revenue Discount Sensitivity Analysis", fontsize=14, fontweight="bold", y=1.02)
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "10_beta_sensitivity.png", dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -851,6 +891,10 @@ def main():
 
     print("  Fig 9: Payback period")
     fig9_payback_period(results["payback_data"])
+
+    if "beta_sweep" in results:
+        print("  Fig 10: Beta sensitivity analysis")
+        fig10_beta_sensitivity(results["beta_sweep"], baseline["total_cost"])
 
     print(f"\nDone. Figures saved to {FIGURES_DIR}/")
 

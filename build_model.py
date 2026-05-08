@@ -69,6 +69,10 @@ DSU_MIN_MW = 4.0        # minimum enrolled capacity to participate as DSU
 EIRGRID_CAP_RATE = 138  # k€/MW/yr — EirGrid average annual DSU capacity payment
 ENERGY_ARB_RATE = 81.0  # EUR/MWh — avoided peak energy charge (thesis reference)
 
+# Revenue discount factor — models auction uncertainty for larger DSU bids
+P_MAX = max(P_OPTIONS)
+BETA_VALUES = [round(b, 2) for b in np.arange(0.0, 0.55, 0.05)]
+
 
 def hour_index_to_datetime(h):
     return datetime(YEAR, 1, 1) + timedelta(hours=int(h))
@@ -403,6 +407,42 @@ def compute_dr_revenue(dispatch, P_BESS, E_BESS):
     }
 
 
+def discount_factor(P, beta):
+    return 1.0 - beta * (P / P_MAX)
+
+
+def run_beta_sweep(bess_results, beta_values=BETA_VALUES):
+    sweep = []
+    for beta in beta_values:
+        configs = {}
+        for key, val in bess_results.items():
+            P = val["P_MW"]
+            p = discount_factor(P, beta)
+            raw_dr = val["dr_info"]["dr_revenue"]
+            adj_dr = raw_dr * p
+            adj_net_cost = val["total_cost"] - adj_dr
+            configs[key] = {
+                "P_MW": P,
+                "tau_h": val["tau_h"],
+                "E_MWh": val["E_MWh"],
+                "total_cost": val["total_cost"],
+                "raw_dr_revenue": raw_dr,
+                "discount_factor": p,
+                "adjusted_dr_revenue": adj_dr,
+                "adjusted_net_cost": adj_net_cost,
+            }
+        best_key = min(configs, key=lambda k: configs[k]["adjusted_net_cost"])
+        sweep.append({
+            "beta": beta,
+            "configs": configs,
+            "best_key": best_key,
+            "best_net_cost": configs[best_key]["adjusted_net_cost"],
+            "best_P_MW": configs[best_key]["P_MW"],
+            "best_E_MWh": configs[best_key]["E_MWh"],
+        })
+    return {"beta_values": beta_values, "sweep_results": sweep}
+
+
 def dr_breakeven_analysis(bess_result, baseline_cost):
     """Breakeven sweep using pre-computed DR info from BESS config selection."""
     dr_info = bess_result["dr_info"]
@@ -509,6 +549,13 @@ def main():
     print("\n[Phase 3b] BESS optimization — Updated costs (BNEF 2025)...")
     bess_results_updated = run_bess_optimization(spot, tou, BESS_UPDATED)
 
+    # Phase 3c: Revenue discount factor sensitivity sweep
+    print("\n[Phase 3c] Revenue discount factor sensitivity sweep...")
+    beta_sweep = run_beta_sweep(bess_results_updated)
+    for entry in beta_sweep["sweep_results"]:
+        print(f"  beta={entry['beta']:.2f}: optimal={entry['best_P_MW']}MW/"
+              f"{entry['best_E_MWh']}MWh, net_cost=EUR{entry['best_net_cost']/1e6:.2f}M/yr")
+
     # Select optimal config (updated costs, accounting for DR revenue)
     best_key = min(bess_results_updated, key=lambda k: bess_results_updated[k]["net_cost"])
     best = bess_results_updated[best_key]
@@ -575,6 +622,7 @@ def main():
             }
             for key, val in bess_results_updated.items()
         },
+        "beta_sweep": beta_sweep,
         "payback_data": {
             "capex": BESS_UPDATED["c_P_cap"] * best["P_MW"] * 1000
                      + BESS_UPDATED["c_E_cap"] * best["E_MWh"] * 1000,

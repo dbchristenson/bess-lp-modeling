@@ -1,0 +1,136 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+\begin{document}
+
+\section*{Objective Function}
+
+The objective of the sizing and operation problem is to minimize the risk-adjusted
+annualized life-cycle cost (ALCC). This formulation is simplified from
+Ljungblom~(2025, Eq.~3.1): PV, wind, and SMR generation terms are dropped
+(grid~+~BESS only), grid export is removed, and a revenue discount factor
+captures auction uncertainty for larger DSU bids.
+
+\begin{equation}
+\boxed{
+\begin{aligned}
+\min \; Z \;=\; & F_{\text{sub}} \\[6pt]
+& + \underbrace{
+    \text{AF}_{\text{BESS}}
+    \left(c_P^{\text{cap}}\, P_{\text{BESS}}
+        + c_E^{\text{cap}}\, E_{\text{BESS}}\right)
+    + c_P^{\text{opex}}\, P_{\text{BESS}}
+    + c_E^{\text{opex}}\, E_{\text{BESS}}
+}_{\text{BESS CapEx + O\&M}} \\[6pt]
+& + \underbrace{
+    \sum_{t \in \mathcal{T}}
+    \left(\lambda_t + \pi_t\right) i_t
+}_{\text{Grid import cost}} \\[6pt]
+& - \underbrace{
+    \left(1 - \beta\,\frac{P_{\text{BESS}}}{P_{\max}}\right)
+    R_{\text{DR}}
+}_{\text{Risk-adjusted DR revenue}}
+\end{aligned}
+}
+\tag{1}
+\end{equation}
+
+\noindent where the demand response revenue $R_{\text{DR}}$ is defined as:
+
+\begin{equation}
+R_{\text{DR}} \;=\;
+\underbrace{
+    r^{\text{cap}}\, C_{\text{enr}}
+    \cdot \mathbb{1}\!\left(C_{\text{enr}} \geq C_{\min}\right)
+}_{\text{DSU capacity payment}}
+\;+\;
+\underbrace{
+    r^{\text{arb}} \sum_{t \in \mathcal{T}_{\text{peak}}} d_t
+}_{\text{Energy arbitrage}}
+\tag{2}
+\end{equation}
+
+\subsection*{Subject to}
+
+\begin{alignat}{3}
+& \text{Energy balance:}
+    &\quad & i_t + d_t = D + c_t
+    && \quad \forall\, t \in \mathcal{T}
+    \tag{3} \\[4pt]
+& \text{State of charge:}
+    && s_t = s_{t-1} + \eta_{\text{c}}\, c_t - d_t
+    && \quad \forall\, t \in \mathcal{T},\; t > 0
+    \tag{4} \\[4pt]
+& \text{Initial SoC:}
+    && s_0 = S_0 + \eta_{\text{c}}\, c_0 - d_0
+    &&
+    \tag{5} \\[4pt]
+& \text{Wrap-around:}
+    && s_{|\mathcal{T}|-1} \geq S_0
+    &&
+    \tag{6} \\[4pt]
+& \text{Charge bound:}
+    && 0 \leq c_t \leq P_{\text{BESS}}
+    && \quad \forall\, t \in \mathcal{T}
+    \tag{7} \\[4pt]
+& \text{Discharge bound:}
+    && 0 \leq d_t \leq P_{\text{BESS}}
+    && \quad \forall\, t \in \mathcal{T}
+    \tag{8} \\[4pt]
+& \text{SoC bound:}
+    && 0 \leq s_t \leq E_{\text{BESS}}
+    && \quad \forall\, t \in \mathcal{T}
+    \tag{9} \\[4pt]
+& \text{Import bound:}
+    && 0 \leq i_t \leq C_{\text{grid}}
+    && \quad \forall\, t \in \mathcal{T}
+    \tag{10}
+\end{alignat}
+
+\subsection*{Notation}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Symbol} & \textbf{Description} & \textbf{Unit} \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Decision variables}} \\
+$i_t$             & Grid import at hour $t$            & MW \\
+$c_t$             & BESS charge at hour $t$            & MW \\
+$d_t$             & BESS discharge at hour $t$         & MW \\
+$s_t$             & State of charge at hour $t$        & MWh \\
+$P_{\text{BESS}}$ & BESS power rating (enumerated)     & MW \\
+$E_{\text{BESS}}$ & BESS energy capacity $= P_{\text{BESS}} \cdot \tau$ & MWh \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{Parameters}} \\
+$F_{\text{sub}}$  & Annual grid subscription fee        & EUR/yr \\
+$\text{AF}_{\text{BESS}}$ & Capital recovery factor (annuity factor) & -- \\
+$c_P^{\text{cap}},\; c_E^{\text{cap}}$ & BESS power/energy CapEx & EUR/kW, EUR/kWh \\
+$c_P^{\text{opex}},\; c_E^{\text{opex}}$ & BESS power/energy OpEx & EUR/kW-yr, EUR/kWh-yr \\
+$\lambda_t$       & Spot price at hour $t$             & EUR/MWh \\
+$\pi_t$           & TOU network tariff at hour $t$     & EUR/MWh \\
+$D$               & Constant data center load           & MW \\
+$C_{\text{grid}}$ & Grid connection capacity            & MW \\
+$\eta_{\text{c}}$ & One-way charge efficiency           & -- \\
+$S_0$             & Initial state of charge             & MWh \\
+$\tau$            & BESS duration                       & h \\
+\midrule
+\multicolumn{3}{@{}l}{\textit{DR and risk parameters}} \\
+$r^{\text{cap}}$  & DSU capacity payment rate            & EUR/MW/yr \\
+$r^{\text{arb}}$  & Energy arbitrage rate                & EUR/MWh \\
+$C_{\text{enr}}$  & Enrolled DSU capacity (5-of-10 baseline) & MW \\
+$C_{\min}$        & Minimum DSU enrollment threshold    & MW \\
+$\mathcal{T}_{\text{peak}}$ & Peak hours (weekdays 16:00--21:00) & -- \\
+$\beta$           & Revenue discount factor             & -- \\
+$P_{\max}$        & Maximum BESS power rating considered & MW \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
