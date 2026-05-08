@@ -44,13 +44,14 @@ BESS_THESIS = {
     "c_E_opex": 4.11,   # EUR/kWh-yr energy O&M
 }
 
-# BESS — updated estimates (BNEF 2025 CapEx + inflation-adjusted OpEx)
+# BESS — updated estimates (NREL ATB 2024, Advanced scenario, 2025 projection)
+# Source: Cole & Karmakar (2023), 2022 USD converted at 0.95 EUR/USD
 BESS_UPDATED = {
-    "label": "BNEF 2025 CapEx + Inflation-Adj. OpEx",
-    "c_P_cap": 500.0,
-    "c_E_cap": 120.0,
-    "c_P_opex": 17.3,   # thesis 16.9 × 1.025 (Irish CPI, rising labor costs)
-    "c_E_opex": 4.21,   # thesis 4.11 × 1.025
+    "label": "NREL ATB 2024 Adv.",
+    "c_P_cap": 221.4,   # EUR/kW power CapEx ($233.06 × 0.95)
+    "c_E_cap": 239.6,   # EUR/kWh energy CapEx ($252.16 × 0.95)
+    "c_P_opex": 5.5,    # EUR/kW-yr power O&M ($5.82 × 0.95)
+    "c_E_opex": 6.0,    # EUR/kWh-yr energy O&M ($6.31 × 0.95)
 }
 
 ETA_RT = 0.95  # round-trip efficiency
@@ -67,7 +68,6 @@ TAU_OPTIONS = [1, 2, 4]        # hours
 # Demand Side Unit (DSU) — EirGrid capacity market
 DSU_MIN_MW = 4.0        # minimum enrolled capacity to participate as DSU
 EIRGRID_CAP_RATE = 138  # k€/MW/yr — EirGrid average annual DSU capacity payment
-ENERGY_ARB_RATE = 81.0  # EUR/MWh — avoided peak energy charge (thesis reference)
 
 # Revenue discount factor — models auction uncertainty for larger DSU bids
 P_MAX = max(P_OPTIONS)
@@ -238,7 +238,7 @@ def solve_bess_dispatch(P_BESS, E_BESS, spot, tou, verbose=False):
 def run_bess_optimization(spot, tou, bess_costs):
     """Enumerate all BESS configs, return results dict keyed by (P, tau).
 
-    Each config includes DR revenue (DSU capacity payment + energy arbitrage)
+    Each config includes DR revenue (DSU capacity payment)
     so that config selection can account for the EirGrid capacity market.
     """
     results = {}
@@ -393,15 +393,13 @@ def compute_dr_revenue(dispatch, P_BESS, E_BESS):
     annual_peak_discharge_MWh = float(np.sum(dispatch["discharge"][peak_mask]))
 
     annual_cap_payment = EIRGRID_CAP_RATE * 1000 * enrolled_capacity_MW if dsu_eligible else 0.0
-    energy_arb_revenue = ENERGY_ARB_RATE * annual_peak_discharge_MWh
-    dr_revenue = annual_cap_payment + energy_arb_revenue
+    dr_revenue = annual_cap_payment
 
     return {
         "events": events,
         "enrolled_capacity_MW": enrolled_capacity_MW,
         "dsu_eligible": dsu_eligible,
         "annual_cap_payment": annual_cap_payment,
-        "energy_arb_revenue": energy_arb_revenue,
         "dr_revenue": dr_revenue,
         "annual_peak_discharge_MWh": annual_peak_discharge_MWh,
     }
@@ -444,29 +442,24 @@ def run_beta_sweep(bess_results, beta_values=BETA_VALUES):
 
 
 def dr_breakeven_analysis(bess_result, baseline_cost):
-    """Breakeven sweep using pre-computed DR info from BESS config selection."""
+    """Breakeven sweep over DSU capacity payment rates."""
     dr_info = bess_result["dr_info"]
     enrolled_capacity_MW = dr_info["enrolled_capacity_MW"]
     dsu_eligible = dr_info["dsu_eligible"]
-    annual_peak_discharge_MWh = dr_info["annual_peak_discharge_MWh"]
 
-    cap_rates = np.linspace(0, 250, 51)      # k€/MW/yr
-    energy_rates = np.linspace(0, 150, 31)    # EUR/MWh
+    cap_rates = np.linspace(0, 250, 51)  # k€/MW/yr
 
     bess_deficit = bess_result["total_cost"] - baseline_cost
 
-    breakeven_grid = np.zeros((len(energy_rates), len(cap_rates)))
+    breakeven_curve = np.zeros(len(cap_rates))
     for j, cr in enumerate(cap_rates):
-        for k, er in enumerate(energy_rates):
-            cap_rev = cr * 1000 * enrolled_capacity_MW if dsu_eligible else 0.0
-            energy_rev = er * annual_peak_discharge_MWh
-            breakeven_grid[k, j] = cap_rev + energy_rev + bess_deficit
+        cap_rev = cr * 1000 * enrolled_capacity_MW if dsu_eligible else 0.0
+        breakeven_curve[j] = cap_rev + bess_deficit
 
     return {
         **dr_info,
         "cap_rates": cap_rates,
-        "energy_rates": energy_rates,
-        "breakeven_grid": breakeven_grid,
+        "breakeven_curve": breakeven_curve,
         "bess_deficit": bess_deficit,
         "dr_net": bess_deficit + dr_info["dr_revenue"],
     }
@@ -546,7 +539,7 @@ def main():
     print("\n[Phase 3a] BESS optimization — Thesis costs (NREL ATB 2025)...")
     bess_results_thesis = run_bess_optimization(spot, tou, BESS_THESIS)
 
-    print("\n[Phase 3b] BESS optimization — Updated costs (BNEF 2025)...")
+    print("\n[Phase 3b] BESS optimization — Updated costs (NREL ATB 2024 Adv.)...")
     bess_results_updated = run_bess_optimization(spot, tou, BESS_UPDATED)
 
     # Phase 3c: Revenue discount factor sensitivity sweep
@@ -573,7 +566,6 @@ def main():
     dr_result = dr_breakeven_analysis(best, baseline["total_cost"])
     print(f"  Events identified: {len(dr_result['events'])}")
     print(f"  DSU capacity payment (€{EIRGRID_CAP_RATE}k/MW/yr): €{dr_result['annual_cap_payment']:,.0f}")
-    print(f"  Energy arbitrage (€{ENERGY_ARB_RATE}/MWh): €{dr_result['energy_arb_revenue']:,.0f}")
     print(f"  Total DR revenue: €{dr_result['dr_revenue']:,.0f}")
     print(f"  BESS deficit vs baseline: €{dr_result['bess_deficit']:,.0f}")
     print(f"  Net with DR: €{dr_result['dr_net']:,.0f} ({'profitable' if dr_result['dr_net'] > 0 else 'not profitable'})")

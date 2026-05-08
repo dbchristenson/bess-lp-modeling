@@ -527,56 +527,55 @@ def fig6_bess_config_comparison(bess_results, baseline_cost):
 
 
 def fig7_dr_breakeven(dr_result):
-    fig, ax = plt.subplots(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=(10, 6))
 
-    X, Y = np.meshgrid(dr_result["cap_rates"], dr_result["energy_rates"])
-    Z = dr_result["breakeven_grid"] / 1e6
+    cap_rates = dr_result["cap_rates"]
+    net_savings = dr_result["breakeven_curve"] / 1e6
 
-    im = ax.contourf(X, Y, Z, levels=20, cmap="RdYlGn")
-    contour = ax.contour(
-        X, Y, Z, levels=[0], colors=["#333"], linewidths=2.5, linestyles=["--"]
+    ax.plot(cap_rates, net_savings, color=PAL["grid"], linewidth=2.5, zorder=3)
+    ax.axhline(0, color="#999", linewidth=1, linestyle="--", zorder=1)
+
+    ax.fill_between(
+        cap_rates, net_savings, 0,
+        where=(net_savings >= 0), color=PAL["positive"], alpha=0.15,
+        label="Net profitable",
     )
-    ax.clabel(contour, fmt="Break-even", fontsize=10, colors=["#333"])
+    ax.fill_between(
+        cap_rates, net_savings, 0,
+        where=(net_savings < 0), color=PAL["negative"], alpha=0.15,
+        label="Net loss",
+    )
+
+    eirgrid_rate = 138
+    eirgrid_idx = np.argmin(np.abs(cap_rates - eirgrid_rate))
+    eirgrid_val = net_savings[eirgrid_idx]
 
     ax.plot(
-        138,
-        81,
-        marker="*",
-        markersize=18,
-        color="white",
-        markeredgecolor="#333",
-        markeredgewidth=1.5,
-        zorder=5,
+        eirgrid_rate, eirgrid_val,
+        marker="*", markersize=18,
+        color="white", markeredgecolor="#333",
+        markeredgewidth=1.5, zorder=5,
     )
     ax.annotate(
-        "EirGrid DSU rate\n(€138k/MW/yr, €81/MWh)",
-        xy=(138, 81),
-        xytext=(170, 55),
-        fontsize=10,
-        fontweight="bold",
+        f"EirGrid T-1 rate\n(€{eirgrid_rate}k/MW/yr)",
+        xy=(eirgrid_rate, eirgrid_val),
+        xytext=(eirgrid_rate + 30, eirgrid_val - 0.15),
+        fontsize=10, fontweight="bold",
         arrowprops=dict(arrowstyle="->", color="#333", lw=1.5),
         bbox=dict(
             boxstyle="round,pad=0.4",
-            facecolor="white",
-            edgecolor="#333",
-            alpha=0.9,
+            facecolor="white", edgecolor="#333", alpha=0.9,
         ),
     )
 
-    cb = fig.colorbar(im, ax=ax, shrink=0.85)
-    cb.set_label("Net Annual Savings (M€/yr)")
-    cb.outline.set_visible(False)
-
     ax.set_xlabel("DSU Capacity Payment (k€/MW/yr)")
-    ax.set_ylabel("Avoided Peak Energy Charge (EUR/MWh)")
-    ax.set_title(
-        "DR Break-Even Analysis — EirGrid DSU Capacity + Energy Arbitrage"
-    )
-    for spine in ax.spines.values():
-        spine.set_visible(False)
+    ax.set_ylabel("Net Annual Savings vs. Grid-Only (M€/yr)")
+    ax.set_title("DR Break-Even Analysis — EirGrid DSU Capacity Payments")
+    ax.legend(loc="lower right")
+    ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("€%.2fM"))
 
     fig.tight_layout()
-    fig.savefig(FIGURES_DIR / "07_dr_breakeven_contour.png", dpi=DPI)
+    fig.savefig(FIGURES_DIR / "07_dr_breakeven_capacity.png", dpi=DPI)
     plt.close(fig)
 
 
@@ -883,7 +882,7 @@ def main():
     print("  Fig 6: BESS config comparison")
     fig6_bess_config_comparison(bess_configs, baseline["total_cost"])
 
-    print("  Fig 7: DR break-even contour")
+    print("  Fig 7: DR break-even")
     fig7_dr_breakeven(dr_result)
 
     print("  Fig 8: Monthly cost comparison")

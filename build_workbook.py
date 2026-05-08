@@ -23,14 +23,13 @@ T = 8760
 YEAR = 2023
 D_MW = 10.0
 CARBON_INTENSITY = 225
-ENERGY_ARB_RATE = 81.0  # EUR/MWh — avoided peak energy charge
 
 BESS_UPDATED = {
-    "label": "BNEF 2025 (updated)",
-    "c_P_cap": 500.0,
-    "c_E_cap": 120.0,
-    "c_P_opex": 12.5,
-    "c_E_opex": 3.0,
+    "label": "NREL ATB 2024 Adv.",
+    "c_P_cap": 221.4,
+    "c_E_cap": 239.6,
+    "c_P_opex": 5.5,
+    "c_E_opex": 6.0,
 }
 
 WACC = 0.08
@@ -141,10 +140,10 @@ def write_assumptions_sheet(wb):
         ("TOU Tariff — Peak", 66.40, 66.40, "EUR/MWh", "Thesis Table 3.2"),
         ("TOU Tariff — Night", 53.53, 53.53, "EUR/MWh", "Thesis Table 3.2"),
         ("Grid Subscription Fee", 4_403_376, 4_403_376, "EUR/yr", "Thesis Table 3.3"),
-        ("BESS Power CapEx", 675, 500, "EUR/kW", "NREL ATB 2025 / BNEF 2025"),
-        ("BESS Energy CapEx", 165.6, 120, "EUR/kWh", "NREL ATB 2025 / BNEF 2025"),
-        ("BESS Power O&M", 16.9, 12.5, "EUR/kW-yr", "NREL ATB 2025 / BNEF 2025"),
-        ("BESS Energy O&M", 4.11, 3.0, "EUR/kWh-yr", "NREL ATB 2025 / BNEF 2025"),
+        ("BESS Power CapEx", 675, 221.4, "EUR/kW", "NREL ATB 2025 / NREL ATB 2024 Adv."),
+        ("BESS Energy CapEx", 165.6, 239.6, "EUR/kWh", "NREL ATB 2025 / NREL ATB 2024 Adv."),
+        ("BESS Power O&M", 16.9, 5.5, "EUR/kW-yr", "NREL ATB 2025 / NREL ATB 2024 Adv."),
+        ("BESS Energy O&M", 4.11, 6.0, "EUR/kWh-yr", "NREL ATB 2025 / NREL ATB 2024 Adv."),
         ("Round-Trip Efficiency", "95%", "95%", "", "Thesis Table 3.7"),
         ("BESS Lifetime", 15, 15, "years", "Thesis Table 3.7"),
         ("WACC", "8%", "8%", "", "Thesis assumption"),
@@ -254,8 +253,7 @@ def write_dr_sheet(wb, dr_result):
     ws = wb.create_sheet("DR Analysis")
     headers = ["Event #", "Day of Year", "Date", "Start Hour",
                "Duration (h)", "Baseline Import (MW)", "Actual Import (MW)",
-               "Curtailed (MWh)", "Capacity Claim (MW)",
-               "Energy Arbitrage (€)"]
+               "Curtailed (MWh)", "Capacity Claim (MW)"]
     for c, h in enumerate(headers, 1):
         ws.cell(row=1, column=c, value=h)
     style_header_row(ws, 1, len(headers))
@@ -264,14 +262,12 @@ def write_dr_sheet(wb, dr_result):
     for idx, ev in enumerate(events):
         row = idx + 2
         dt = hour_index_to_datetime(ev["start_hour"])
-        en_arb = ENERGY_ARB_RATE * ev["curtailed_MWh"]
         actual_import = D_MW - ev["curtailed_MWh"] / ev["duration_h"] if ev["duration_h"] > 0 else D_MW
 
         vals = [idx + 1, ev["day"], dt.strftime("%Y-%m-%d"),
                 dt.strftime("%H:%M"), ev["duration_h"],
                 ev["baseline_import_MW"], actual_import,
-                ev["curtailed_MWh"], ev["capacity_claim_MW"],
-                en_arb]
+                ev["curtailed_MWh"], ev["capacity_claim_MW"]]
         for c, val in enumerate(vals, 1):
             ws.cell(row=row, column=c, value=val)
             fmt = NUM_FMT_EUR_DEC if c >= 6 else None
@@ -281,8 +277,7 @@ def write_dr_sheet(wb, dr_result):
     ws.cell(row=total_row, column=1, value="TOTAL")
     ws.cell(row=total_row, column=1).font = Font(bold=True)
     ws.cell(row=total_row, column=8, value=sum(e["curtailed_MWh"] for e in events))
-    ws.cell(row=total_row, column=10, value=sum(ENERGY_ARB_RATE * e["curtailed_MWh"] for e in events))
-    for c in range(1, 11):
+    for c in range(1, 10):
         style_data_cell(ws, total_row, c, NUM_FMT_EUR_DEC if c >= 8 else None)
 
     summary_row = total_row + 2
@@ -294,7 +289,6 @@ def write_dr_sheet(wb, dr_result):
         ("Enrolled Capacity (MW)", enrolled),
         ("DSU Eligible (≥4 MW)", "Yes" if eligible else "No"),
         ("EirGrid Capacity Payment (€)", dr_result.get("annual_cap_payment", 0)),
-        ("Energy Arbitrage (€)", dr_result.get("energy_arb_revenue", 0)),
         ("Total DR Revenue (€)", dr_result["dr_revenue"]),
         ("Annual Peak Discharge (MWh)", dr_result.get("annual_peak_discharge_MWh", 0)),
         ("BESS Deficit (€)", dr_result["bess_deficit"]),

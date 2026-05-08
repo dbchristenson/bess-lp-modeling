@@ -43,14 +43,8 @@ captures auction uncertainty for larger DSU bids.
 
 \begin{equation}
 R_{\text{DR}} \;=\;
-\underbrace{
     r^{\text{cap}}\, C_{\text{enr}}
     \cdot \mathbb{1}\!\left(C_{\text{enr}} \geq C_{\min}\right)
-}_{\text{DSU capacity payment}}
-\;+\;
-\underbrace{
-    r^{\text{arb}} \sum_{t \in \mathcal{T}_{\text{peak}}} d_t
-}_{\text{Energy arbitrage}}
 \tag{2}
 \end{equation}
 
@@ -91,6 +85,7 @@ R_{\text{DR}} \;=\;
     \tag{10}
 \end{alignat}
 
+\:
 \subsection*{Notation}
 
 \begin{table}[h]
@@ -123,10 +118,8 @@ $\tau$            & BESS duration                       & h \\
 \midrule
 \multicolumn{3}{@{}l}{\textit{DR and risk parameters}} \\
 $r^{\text{cap}}$  & DSU capacity payment rate            & EUR/MW/yr \\
-$r^{\text{arb}}$  & Energy arbitrage rate                & EUR/MWh \\
 $C_{\text{enr}}$  & Enrolled DSU capacity (5-of-10 baseline) & MW \\
 $C_{\min}$        & Minimum DSU enrollment threshold    & MW \\
-$\mathcal{T}_{\text{peak}}$ & Peak hours (weekdays 16:00--21:00) & -- \\
 $\beta$           & Revenue discount factor             & -- \\
 $P_{\max}$        & Maximum BESS power rating considered & MW \\
 \bottomrule
