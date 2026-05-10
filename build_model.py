@@ -30,6 +30,7 @@ C_GRID = 20.0  # grid connection capacity (MW); 2× DC load to allow BESS chargi
 
 # Grid (thesis Tables 3.1-3.3)
 CARBON_INTENSITY = 225  # gCO2/kWh (SEAI)
+PEAKER_CARBON_INTENSITY = 800  # gCO2/kWh — Oil/HFO peaker (UNECE LCA, 2021; midpoint of 740–890 range)
 TOU_DAY = 65.03  # EUR/MWh (08-17 weekdays)
 TOU_PEAK = 66.40  # EUR/MWh (17-19 weekdays)
 TOU_NIGHT = 53.53  # EUR/MWh (23-08 and weekends)
@@ -405,6 +406,22 @@ def compute_dr_revenue(dispatch, P_BESS, E_BESS):
     }
 
 
+def compute_emissions_reduction(dr_events):
+    """Avoided emissions from displacing oil/HFO peaker generation during DR events."""
+    total_dr_hours = sum(ev["duration_h"] for ev in dr_events)
+    dr_energy_mwh = total_dr_hours * D_MW
+    peaker_emissions = dr_energy_mwh * PEAKER_CARBON_INTENSITY / 1000  # tCO2
+    grid_avg_emissions = dr_energy_mwh * CARBON_INTENSITY / 1000  # tCO2
+    avoided = peaker_emissions - grid_avg_emissions
+    return {
+        "total_dr_hours": total_dr_hours,
+        "dr_energy_mwh": dr_energy_mwh,
+        "peaker_emissions_tCO2": peaker_emissions,
+        "grid_avg_emissions_tCO2": grid_avg_emissions,
+        "avoided_emissions_tCO2": avoided,
+    }
+
+
 def discount_factor(P, beta):
     return 1.0 - beta * (P / P_MAX)
 
@@ -469,7 +486,7 @@ def dr_breakeven_analysis(bess_result, baseline_cost):
 # Phase 5: Scenario Summary
 # ---------------------------------------------------------------------------
 
-def build_scenario_summary(baseline, bess_result, dr_result, bess_costs):
+def build_scenario_summary(baseline, bess_result, dr_result, bess_costs, emissions_reduction):
     P = bess_result["P_MW"]
     E = bess_result["E_MWh"]
     capex = bess_costs["c_P_cap"] * P * 1000 + bess_costs["c_E_cap"] * E * 1000
@@ -481,11 +498,14 @@ def build_scenario_summary(baseline, bess_result, dr_result, bess_costs):
     dr_payback = capex / dr_savings if dr_savings > 0 else float("inf")
     dr_total_cost = bess_result["total_cost"] - dr_result["dr_revenue"]
 
+    avoided = emissions_reduction["avoided_emissions_tCO2"]
+
     return {
         "Grid-Only": {
             "ALCC (M€/yr)": baseline["total_cost"] / 1e6,
             "LCOE (EUR/MWh)": baseline["lcoe"],
             "Emissions (tCO₂/yr)": baseline["emissions_tCO2"],
+            "Avoided Emissions (tCO₂/yr)": 0,
             "Peak Import (MW)": baseline["peak_import_MW"],
             "BESS Cycles/yr": 0,
             "Payback (years)": "N/A",
@@ -495,6 +515,7 @@ def build_scenario_summary(baseline, bess_result, dr_result, bess_costs):
             "ALCC (M€/yr)": bess_result["total_cost"] / 1e6,
             "LCOE (EUR/MWh)": bess_result["total_cost"] / (D_MW * T),
             "Emissions (tCO₂/yr)": bess_result["emissions_tCO2"],
+            "Avoided Emissions (tCO₂/yr)": 0,
             "Peak Import (MW)": float(np.max(bess_result["dispatch"]["grid_import"])),
             "BESS Cycles/yr": bess_result["cycles"],
             "Payback (years)": bess_payback,
@@ -504,6 +525,7 @@ def build_scenario_summary(baseline, bess_result, dr_result, bess_costs):
             "ALCC (M€/yr)": dr_total_cost / 1e6,
             "LCOE (EUR/MWh)": dr_total_cost / (D_MW * T),
             "Emissions (tCO₂/yr)": bess_result["emissions_tCO2"],
+            "Avoided Emissions (tCO₂/yr)": avoided,
             "Peak Import (MW)": float(np.max(bess_result["dispatch"]["grid_import"])),
             "BESS Cycles/yr": bess_result["cycles"],
             "Payback (years)": dr_payback,
@@ -570,9 +592,20 @@ def main():
     print(f"  BESS deficit vs baseline: €{dr_result['bess_deficit']:,.0f}")
     print(f"  Net with DR: €{dr_result['dr_net']:,.0f} ({'profitable' if dr_result['dr_net'] > 0 else 'not profitable'})")
 
+    # Phase 4b: Emissions reduction from peaker displacement
+    emissions_reduction = compute_emissions_reduction(dr_result["events"])
+    print(f"\n  Emissions reduction (peaker displacement):")
+    print(f"    DR energy dispatched: {emissions_reduction['dr_energy_mwh']:.0f} MWh"
+          f" ({emissions_reduction['total_dr_hours']:.0f} hours × {D_MW:.0f} MW)")
+    print(f"    Peaker emissions (Oil/HFO, {PEAKER_CARBON_INTENSITY} gCO₂/kWh):"
+          f" {emissions_reduction['peaker_emissions_tCO2']:.0f} tCO₂")
+    print(f"    Grid-average emissions ({CARBON_INTENSITY} gCO₂/kWh):"
+          f" {emissions_reduction['grid_avg_emissions_tCO2']:.0f} tCO₂")
+    print(f"    Avoided emissions: {emissions_reduction['avoided_emissions_tCO2']:.0f} tCO₂/yr")
+
     # Phase 5: Summary
     print("\n[Phase 5] Building scenario summary...")
-    summary = build_scenario_summary(baseline, best, dr_result, BESS_UPDATED)
+    summary = build_scenario_summary(baseline, best, dr_result, BESS_UPDATED, emissions_reduction)
     for scenario, metrics in summary.items():
         print(f"\n  {scenario}:")
         for k, v in metrics.items():
@@ -614,6 +647,7 @@ def main():
             }
             for key, val in bess_results_updated.items()
         },
+        "emissions_reduction": emissions_reduction,
         "beta_sweep": beta_sweep,
         "payback_data": {
             "capex": BESS_UPDATED["c_P_cap"] * best["P_MW"] * 1000
