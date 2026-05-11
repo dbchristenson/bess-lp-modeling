@@ -45,7 +45,31 @@ Additional detail on the mathematical formulation of the objective function and 
 
 # Results
 
+Ireland's I-SEM spot market exhibits strong temporal price variation that creates a clear opportunity for battery arbitrage. Figure 1 shows average hourly spot prices across 2023: evening peaks regularly exceed €140/MWh during winter months, while overnight and spring/summer hours — particularly April through August — frequently fall below €20/MWh and occasionally turn negative. These negative prices coincide with periods of high wind output that the grid cannot absorb; in 2023, approximately 11% of Ireland's wind generation was curtailed (Climate Jargon Buster, n.d.). A co-located BESS can capture this otherwise wasted energy and discharge it during peak hours, converting a grid liability into facility savings.
+
+**Figure 1.** Average Hourly I-SEM Spot Price Heatmap, 2023
+
+The model evaluates fifteen BESS configurations spanning five power ratings (2, 4, 6, 8, and 10 MW) and three duration classes (1-, 2-, and 4-hour storage). For each configuration, an LP minimizes annual energy import costs subject to charge/discharge and state-of-charge constraints. The optimizer selects a 10 MW / 20 MWh system (2-hour duration) as the cost-minimizing configuration. At 10 MW the battery can fully offset the data center's load during discharge hours, and the 2-hour duration balances sufficient energy capacity for daily arbitrage cycling against the higher per-MWh capital cost of longer-duration systems. This configuration also maximizes the DSU enrollment capacity at the full 10 MW, capturing the largest possible capacity payment from EirGrid.
+
+Figure 2 summarizes the annual cost impact of this optimal BESS under each scenario. Against the Grid-Only baseline of €17.31M/yr, energy arbitrage alone saves €1.02M/yr — but the annualized BESS capital and operating costs total €0.99M/yr, leaving a net arbitrage margin of only €0.03M/yr. Software licensing, component degradation, and price volatility could easily erode this margin, making arbitrage alone too risky to justify the investment. Adding EirGrid DSU capacity payments of €1.14M/yr transforms the economics: the combined BESS + DR scenario achieves net savings of €1.17M/yr, reducing total annual costs to €16.14M/yr — a 6.7% reduction.
+
+**Figure 2.** Cost Impact vs. Grid-Only Baseline (Waterfall)
+
+These savings are distributed throughout the year. Figure 3 shows monthly electricity cost reductions ranging from 5.0% in January to 11.3% in May, with the largest gains in spring and early summer when the spread between off-peak and peak prices is widest due to high wind availability.
+
+**Figure 3.** Monthly Electricity Cost — Grid-Only vs. BESS
+
+The payback analysis in Figure 4 underscores the importance of demand response revenue. Under discounted cash flow at 8% WACC, the BESS-only scenario barely reaches payback at 14.2 years — the end of the battery's assumed 15-year lifetime — with a marginal NPV of €+0.20M. The BESS + DR scenario, by contrast, achieves discounted payback in just 4.3 years and delivers an NPV of €+10.0M. Without EirGrid's annual DSU capacity payments, BESS investment in the Irish market remains economically marginal; with them, it becomes compelling.
+
+**Figure 4.** BESS Investment Payback — Simple and Discounted
+
+From an emissions perspective, the net impact is approximately neutral. BESS round-trip losses increase annual emissions by 246 tCO₂ relative to the grid-only baseline of 19,710 tCO₂/yr, while DR-dispatched hours displace 230 tCO₂ of oil-fired peaker generation (at 800 gCO₂/kWh versus the 225 gCO₂/kWh grid average), yielding a net change of +16 tCO₂ — effectively carbon-neutral. The emissions case for BESS thus rests not on facility-level reductions but on the systemic value of enabling higher renewable penetration by absorbing curtailed wind.
+
+**Figure 5.** Emissions Impact — BESS & Demand Response
+
 # Regulatory and Policy Considerations
+
+**Layer 2: Peaker Displacement Contract (PDC).** When EirGrid activates a demand response event, the facility draws on its BESS to serve load rather than importing from the grid. Under the PDC, each verified DR event hour earns the facility an additional payment reflecting the social cost of the peaker generation avoided. Our model assumes 20 events per year totaling 400 MWh of curtailed demand. At an emission factor of 800 gCO₂/kWh for oil-fired peaker dispatch, the midpoint of the United Nations Economic Commission for Europe (UNECE) lifecycle assessment range — against a grid average of 225 gCO₂/kWh (SEAI), each curtailed MWh avoids 575 gCO₂. Applied to our modeled DR volume, this yields approximately 230 tonnes of CO₂ avoided annually per facility. For context, Moneypoint generated roughly 2 TWh running on heavy fuel oil in 2025; our single facility's curtailment represents a small but verifiable slice of that displacement. At an EU ETS carbon value of €63/tonne, the implied social benefit is approximately €14,490 per facility per year. Scaled across five pilot participants, verified avoided emissions reach 1,150 tonnes annually, a modest but auditable baseline from which a formal PDC payment structure can be built. The PDC payment would be set at a fraction of the full carbon value, sufficient to incentivize participation while remaining within the bounds of the avoided cost.
 
 # Bibliography
 

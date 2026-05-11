@@ -841,6 +841,105 @@ def fig10_beta_sensitivity(beta_sweep, baseline_cost):
     plt.close(fig)
 
 
+def fig11_emissions_savings(summary, emissions_reduction):
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), gridspec_kw={"width_ratios": [1, 1]})
+
+    # Left panel: changes from baseline
+    baseline_em = summary["Grid-Only"]["Emissions (tCO₂/yr)"]
+    bess_em = summary["Grid+BESS"]["Emissions (tCO₂/yr)"]
+    avoided_em = emissions_reduction["avoided_emissions_tCO2"]
+    rt_loss = bess_em - baseline_em
+    net_change = rt_loss - avoided_em
+
+    labels = ["BESS\nRound-Trip\nLosses", "DR Peaker\nDisplacement", "Net\nChange"]
+    values = [rt_loss, -avoided_em, net_change]
+    colors = [PAL["negative"], PAL["positive"],
+              PAL["positive"] if net_change < 0 else PAL["negative"]]
+
+    x = np.arange(len(labels))
+    width = 0.55
+
+    bars = ax1.bar(x, values, width, color=colors, alpha=0.85,
+                   edgecolor="white", linewidth=1.5)
+
+    max_abs = max(abs(v) for v in values)
+    pad = max_abs * 0.08
+    for i, v in enumerate(values):
+        sign = "+" if v > 0 else "−"
+        ax1.text(x[i], v + (pad if v >= 0 else -pad),
+                 f"{sign}{abs(v):,.0f} tCO₂",
+                 ha="center", va="bottom" if v >= 0 else "top",
+                 fontsize=12, fontweight="bold", color=colors[i])
+
+    ax1.axhline(0, color="#333", linewidth=0.8)
+
+    ax1.axhline(0, color="#333", linewidth=0.8, linestyle="--", alpha=0.3)
+    ylim = max_abs * 1.6
+    ax1.set_ylim(-ylim, ylim)
+
+    ax1.set_xticks(x)
+    ax1.set_xticklabels(labels, fontsize=10)
+    ax1.set_ylabel("Δ tCO₂/yr (vs. Grid-Only Baseline)")
+    ax1.set_title("Change in Emissions vs. Grid-Only")
+    ax1.yaxis.set_major_formatter(mticker.FuncFormatter(
+        lambda v, _: f"{v:+,.0f}" if v != 0 else "0"))
+
+    ax1.text(
+        0.5, 0.02,
+        f"Baseline: {baseline_em:,.0f} tCO₂/yr",
+        transform=ax1.transAxes, ha="center", va="bottom",
+        fontsize=10, style="italic",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f8f8f8", edgecolor="#ccc"),
+    )
+
+    # Right panel: DR peaker displacement breakdown
+    dr_energy = emissions_reduction["dr_energy_mwh"]
+    peaker_em = emissions_reduction["peaker_emissions_tCO2"]
+    grid_avg_em = emissions_reduction["grid_avg_emissions_tCO2"]
+    avoided = emissions_reduction["avoided_emissions_tCO2"]
+
+    bar_labels = ["Peaker\n(displaced)", "Grid Avg\n(actual)", "Avoided"]
+    bar_vals = [peaker_em, grid_avg_em, avoided]
+    bar_colors = [PAL["negative"], PAL["grid"], PAL["positive"]]
+
+    y = np.arange(len(bar_labels))
+    ax2.barh(y, bar_vals, height=0.5, color=bar_colors, alpha=0.85,
+             edgecolor="white", linewidth=1.5)
+
+    for i, v in enumerate(bar_vals):
+        ax2.text(v / 2, y[i], f"{v:,.0f} tCO₂",
+                 ha="center", va="center", fontsize=11, fontweight="bold", color="white")
+
+    ax2.annotate(
+        "", xy=(grid_avg_em, 0.7), xytext=(peaker_em, 0.7),
+        arrowprops=dict(arrowstyle="<->", color="#333", lw=1.5),
+    )
+    ax2.text((peaker_em + grid_avg_em) / 2, 0.85, f"Δ {avoided:,.0f} tCO₂",
+             ha="center", va="bottom", fontsize=9, fontweight="bold", color=PAL["positive"])
+
+    ax2.set_yticks(y)
+    ax2.set_yticklabels(bar_labels, fontsize=11)
+    ax2.set_xlabel("tCO₂/yr")
+    ax2.set_title("DR Peaker Displacement Breakdown")
+    ax2.set_xlim(0, max(bar_vals) * 1.4)
+
+    ax2.text(
+        0.95, 0.95,
+        f"DR dispatched: {dr_energy:,.0f} MWh\n"
+        f"Peaker: 800 gCO₂/kWh (Oil/HFO)\n"
+        f"Grid avg: 225 gCO₂/kWh (SEAI)",
+        transform=ax2.transAxes, ha="right", va="top",
+        fontsize=9, style="italic",
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="#f8f8f8", edgecolor="#ccc"),
+    )
+
+    fig.suptitle("Emissions Impact — BESS & Demand Response",
+                 fontsize=14, fontweight="bold")
+    fig.tight_layout()
+    fig.savefig(FIGURES_DIR / "11_emissions_savings.png", dpi=DPI)
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -894,6 +993,10 @@ def main():
     if "beta_sweep" in results:
         print("  Fig 10: Beta sensitivity analysis")
         fig10_beta_sensitivity(results["beta_sweep"], baseline["total_cost"])
+
+    if "emissions_reduction" in results and "summary" in results:
+        print("  Fig 11: Emissions savings")
+        fig11_emissions_savings(results["summary"], results["emissions_reduction"])
 
     print(f"\nDone. Figures saved to {FIGURES_DIR}/")
 
